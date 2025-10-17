@@ -18,5 +18,5 @@ pip install -r requirements.txt
 ## Jalankan Server
 
 ```sh
-uvicorn main:app --reload
+uvicorn main:app --port 10000 --reload
 ```

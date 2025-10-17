@@ -1,14 +1,14 @@
-# main.py (versi diperbarui)
+# main.py
 
 import io
 import json
 import numpy as np
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware 
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import tensorflow as tf
-from tensorflow.keras.preprocessing import image as tf_image 
+from tensorflow.keras.preprocessing import image as tf_image # type: ignore
 
 # --- KONFIGURASI ---
 MODEL_PATH = "model/model.h5"
@@ -19,7 +19,7 @@ IMG_SIZE = (224, 224)
 app = FastAPI(
     title="Road Damage Detection API",
     description="API untuk mendeteksi jenis kerusakan jalan dari gambar menggunakan model CNN MobileNetV2.",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Tambahkan middleware CORS
@@ -33,7 +33,8 @@ app.add_middleware(
 
 # Inisialisasi list label kosong
 model = None
-CLASS_LABELS = [] 
+CLASS_LABELS = []
+
 
 def load_model():
     """Memuat model Keras dari file .h5"""
@@ -44,6 +45,7 @@ def load_model():
     except Exception as e:
         print(f"❌ Gagal memuat model: {e}")
         model = None
+
 
 def load_labels():
     """Memuat label dari file JSON"""
@@ -58,11 +60,13 @@ def load_labels():
         print(f"❌ Gagal memuat label: {e}")
         CLASS_LABELS = []
 
+
 @app.on_event("startup")
 def startup_event():
     """Event yang dijalankan saat aplikasi start"""
     load_model()
     load_labels()
+
 
 # --- FUNGSI BANTUAN ---
 def preprocess_image(image_bytes: bytes) -> np.ndarray:
@@ -75,24 +79,28 @@ def preprocess_image(image_bytes: bytes) -> np.ndarray:
     - Menambahkan dimensi batch
     """
     image = Image.open(io.BytesIO(image_bytes))
-    
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
-        
+
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+
     image = image.resize(IMG_SIZE)
-    
+
     # Konversi ke array dan skala ke [0, 1]
     img_array = tf_image.img_to_array(image) / 255.0
-    
+
     # Tambahkan dimensi batch
     img_array_expanded = np.expand_dims(img_array, axis=0)
-    
+
     return img_array_expanded
+
 
 # --- API ENDPOINT ---
 @app.get("/", tags=["Root"])
 async def read_root():
-    return {"message": "Selamat datang di Road Damage Detection API. Silakan akses /docs untuk dokumentasi."}
+    return {
+        "message": "Selamat datang di Road Damage Detection API. Silakan akses /docs untuk dokumentasi."
+    }
+
 
 @app.post("/predict", tags=["Prediction"])
 async def predict_damage(file: UploadFile = File(...)):
@@ -103,39 +111,42 @@ async def predict_damage(file: UploadFile = File(...)):
     if model is None or not CLASS_LABELS:
         return JSONResponse(
             status_code=503,
-            content={"error": "Model atau label tidak tersedia. Server mungkin gagal memuatnya."}
+            content={
+                "error": "Model atau label tidak tersedia. Server mungkin gagal memuatnya."
+            },
         )
-    
+
     if not file.content_type.startswith("image/"):
         return JSONResponse(
-            status_code=400,
-            content={"error": "File yang diunggah bukan gambar."}
+            status_code=400, content={"error": "File yang diunggah bukan gambar."}
         )
-    
+
     try:
         image_bytes = await file.read()
         processed_image = preprocess_image(image_bytes)
-        
+
         # Lakukan prediksi
         predictions = model.predict(processed_image)[0]
-        
+
         # Urutkan hasil dari yang terbesar
         sorted_indices = np.argsort(predictions)[::-1]
-        
+
         # Ambil prediksi teratas
         top_predictions = []
         for i in sorted_indices[:3]:
             label = CLASS_LABELS[i]
             confidence_percent = float(predictions[i]) * 100  # Kalikan dengan 100
-            top_predictions.append({
-                "class": label,
-                "confidence": round(confidence_percent, 2) # Bulatkan ke 2 desimal
-            })
-            
+            top_predictions.append(
+                {
+                    "class": label,
+                    "confidence": round(confidence_percent, 2),  # Bulatkan ke 2 desimal
+                }
+            )
+
         return JSONResponse(status_code=200, content={"predictions": top_predictions})
-        
+
     except Exception as e:
         return JSONResponse(
             status_code=500,
-            content={"error": f"Terjadi kesalahan saat memproses gambar: {str(e)}"}
+            content={"error": f"Terjadi kesalahan saat memproses gambar: {str(e)}"},
         )
